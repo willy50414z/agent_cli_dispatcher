@@ -1,16 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 
-@dataclass
+@dataclass(frozen=True)
 class Outcome:
     status: str
     description: str
-    output_files: list[str]
     callback: Callable[["JobResult"], None]
+    output_files: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class JobResult:
     job_id: str
     status: str

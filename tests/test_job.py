@@ -16,7 +16,7 @@ def test_outcome_stores_fields():
     assert o.callback is cb
 
 
-def test_outcome_default_output_files_is_empty():
+def test_outcome_stores_empty_output_files_list():
     o = Outcome(status="ok", description="fine", output_files=[], callback=lambda r: None)
     assert o.output_files == []
 
