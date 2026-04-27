@@ -15,5 +15,5 @@ def test_lookup_by_string():
 
 
 def test_invalid_string_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'unknown' is not a valid LLMTarget"):
         LLMTarget("unknown")
