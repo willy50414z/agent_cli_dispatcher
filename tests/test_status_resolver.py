@@ -10,7 +10,7 @@ def _noop(r):
 
 
 def _outcomes(*statuses):
-    return [Outcome(s, f"desc {s}", _noop) for s in statuses]
+    return [Outcome(f"desc {s}", _noop, status=s) for s in statuses]
 
 
 def test_resolve_detects_status_file(tmp_path):
@@ -43,7 +43,7 @@ def test_resolve_raises_when_status_file_matches_no_outcome(tmp_path):
 
 def test_resolve_raises_when_declared_output_file_missing(tmp_path):
     (tmp_path / "status_incomplete").touch()
-    outcomes = [Outcome("incomplete", "gaps", _noop, output_files=["questions.txt"])]
+    outcomes = [Outcome("gaps", _noop, status="incomplete", output_files=["questions.txt"])]
     with pytest.raises(RuntimeError, match="questions.txt"):
         resolve(tmp_path, outcomes, "id1", "claude", 1.0, "stdout")
 
@@ -51,7 +51,7 @@ def test_resolve_raises_when_declared_output_file_missing(tmp_path):
 def test_resolve_collects_declared_output_file_content(tmp_path):
     (tmp_path / "status_incomplete").touch()
     (tmp_path / "questions.txt").write_text("Q1?")
-    outcomes = [Outcome("incomplete", "gaps", _noop, output_files=["questions.txt"])]
+    outcomes = [Outcome("gaps", _noop, status="incomplete", output_files=["questions.txt"])]
     _, result = resolve(tmp_path, outcomes, "id1", "claude", 1.0, "stdout")
     assert result.files["questions.txt"] == "Q1?"
 
@@ -81,3 +81,11 @@ def test_resolve_uses_first_alphabetical_on_multiple_status_files(tmp_path, capl
         matched, result = resolve(tmp_path, outcomes, "id1", "claude", 1.0, "stdout")
     assert result.status == "complete"
     assert "Multiple status files" in caplog.text
+
+
+def test_resolve_matches_by_index_when_status_not_set(tmp_path):
+    (tmp_path / "status_0").touch()
+    outcomes = [Outcome("done", _noop), Outcome("failed", _noop)]
+    matched, result = resolve(tmp_path, outcomes, "id1", "claude", 1.0, "")
+    assert result.status == "0"
+    assert matched.description == "done"

@@ -1,4 +1,4 @@
-from llm_eval.job import Outcome
+from llm_eval.job import Outcome, effective_status
 
 
 def build_prompt(purpose: str, outcomes: list[Outcome]) -> str:
@@ -14,14 +14,16 @@ def build_prompt(purpose: str, outcomes: list[Outcome]) -> str:
         "Status files (create exactly one, leave it empty):",
     ]
 
-    for outcome in outcomes:
-        lines.append(f"  status_{outcome.status:<20} — {outcome.description}")
+    for i, outcome in enumerate(outcomes):
+        status = effective_status(outcome, i)
+        lines.append(f"  status_{status:<20} — {outcome.description}")
 
     lines.append("")
 
-    for outcome in outcomes:
+    for i, outcome in enumerate(outcomes):
         if outcome.output_files:
-            lines.append(f'If the outcome is "{outcome.status}", also write these files:')
+            status = effective_status(outcome, i)
+            lines.append(f'If the outcome is "{status}", also write these files:')
             for filename in outcome.output_files:
                 lines.append(f"  {filename}")
             lines.append("")

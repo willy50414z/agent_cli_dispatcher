@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from llm_eval.job import JobResult, Outcome
+from llm_eval.job import JobResult, Outcome, effective_status
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,10 @@ def resolve(
         )
 
     if not status_files:
-        error_outcome = next((o for o in outcomes if o.status == "error"), None)
+        error_outcome = next(
+            (o for i, o in enumerate(outcomes) if effective_status(o, i) == "error"),
+            None,
+        )
         if error_outcome is None:
             raise RuntimeError(
                 "No status file created by LLM and no 'error' outcome defined."
@@ -33,18 +36,22 @@ def resolve(
         status_name = "error"
     else:
         status_name = status_files[0].name[len("status_"):]
-        matched = next((o for o in outcomes if o.status == status_name), None)
+        matched = next(
+            (o for i, o in enumerate(outcomes) if effective_status(o, i) == status_name),
+            None,
+        )
         if matched is None:
             raise RuntimeError(
                 f"Status file 'status_{status_name}' does not match any defined outcome."
             )
 
-    missing = [f for f in matched.output_files if not (workspace / f).exists()]
-    if missing:
-        raise RuntimeError(
-            f"Outcome '{status_name}' declared output_files {missing} "
-            "but LLM did not create them."
-        )
+    if matched.output_files is not None:
+        missing = [f for f in matched.output_files if not (workspace / f).exists()]
+        if missing:
+            raise RuntimeError(
+                f"Outcome '{status_name}' declared output_files {missing} "
+                "but LLM did not create them."
+            )
 
     files: dict[str, str] = {
         path.name: path.read_text(encoding="utf-8")

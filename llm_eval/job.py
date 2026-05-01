@@ -4,10 +4,14 @@ from typing import Callable
 
 @dataclass(frozen=True)
 class Outcome:
-    status: str
     description: str
     callback: Callable[["JobResult"], None]
-    output_files: list[str] = field(default_factory=list)
+    status: str | None = None
+    output_files: list[str] | None = None
+
+
+def effective_status(outcome: Outcome, index: int) -> str:
+    return outcome.status if outcome.status is not None else str(index)
 
 
 @dataclass(frozen=True)

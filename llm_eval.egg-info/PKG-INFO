@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: llm-eval
+Version: 0.1.0
+Summary: Structured LLM task runner with outcome routing via file signals
+Requires-Python: >=3.11

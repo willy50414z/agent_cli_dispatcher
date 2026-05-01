@@ -13,6 +13,10 @@ from llm_eval.llm_target import LLMTarget
 
 logger = logging.getLogger(__name__)
 
+
+class LLMEvaluationError(RuntimeError):
+    """LLM subprocess failure: non-zero exit, quota exhaustion, timeout, or execution error."""
+
 _QUOTA_ERROR_PATTERNS: list[re.Pattern] = [
     re.compile(p, re.IGNORECASE)
     for p in [
@@ -57,7 +61,7 @@ def _resolve_cli(command_name: str) -> str:
     return resolved if resolved else command_name
 
 
-def run_once(
+def run(
     target: LLMTarget,
     prompt: str,
     *,
@@ -84,7 +88,7 @@ def run_once(
     output_file = io_dir / f"output_{run_id}.txt"
     prompt_file.write_text(prompt, encoding=encoding)
 
-    stdin_input: str | None = None
+    stdin_input: str = ""
     env = dict(os.environ)
 
     try:
@@ -124,8 +128,9 @@ def run_once(
         else:
             raise ValueError(f"Unsupported LLM target: {target}")
 
-        logger.info("run_once [%s] cwd=%s", target.value, work_dir or "(inherit)")
-        logger.debug("run_once [%s] prompt_file=%s\n%s", target.value, prompt_file, prompt)
+        logger.info("run [%s] cwd=%s", target.value, work_dir or "(inherit)")
+        logger.debug("run [%s] command=%s", target.value, command)
+        logger.debug("run [%s] prompt_file=%s\n%s", target.value, prompt_file, prompt)
 
         completed = None
         for quota_attempt in range(_max_retries + 1):
@@ -140,9 +145,11 @@ def run_once(
                     env=env,
                     timeout=timeout,
                 )
+            except LLMEvaluationError:
+                raise
             except Exception as e:
                 logger.error("execute cmd exception: %s", e)
-                raise
+                raise LLMEvaluationError(f"{target.value} subprocess error: {e}") from e
 
             if completed.returncode != 0:
                 stderr = (completed.stderr or "").strip()
@@ -159,12 +166,12 @@ def run_once(
                     if quota_attempt < _max_retries:
                         time.sleep(_retry_interval)
                         continue
-                    raise RuntimeError(
+                    raise LLMEvaluationError(
                         f"{target.value} quota exhausted after {_max_retries} retries. "
                         f"Last error: {detail[:300]}"
                     )
 
-                raise RuntimeError(
+                raise LLMEvaluationError(
                     f"{target.value} CLI failed (exit {completed.returncode}): {detail[:500]}"
                 )
 
@@ -192,10 +199,31 @@ def run_once(
             except json.JSONDecodeError:
                 pass
 
-        logger.info("run_once [%s] done. stdout_len=%d", target.value, len(raw_stdout))
+        logger.info("run [%s] done. stdout_len=%d", target.value, len(raw_stdout))
         output_file.write_text(raw_stdout, encoding=encoding)
         return output_file.read_text(encoding=encoding)
 
     finally:
         prompt_file.unlink(missing_ok=True)
         output_file.unlink(missing_ok=True)
+
+
+def run_with_fallback(
+    targets: list[LLMTarget],
+    prompt: str,
+    *,
+    model: str | None = None,
+    cwd: str | None = None,
+    timeout: float | None = 1800,
+    encoding: str = "utf-8",
+) -> str:
+    if not targets:
+        raise ValueError("targets must not be empty")
+    last_exc: LLMEvaluationError | None = None
+    for target in targets:
+        try:
+            return run(target, prompt, model=model, cwd=cwd, timeout=timeout, encoding=encoding)
+        except LLMEvaluationError as exc:
+            logger.warning("run_with_fallback: %s failed, trying next. error: %s", target.value, exc)
+            last_exc = exc
+    raise last_exc

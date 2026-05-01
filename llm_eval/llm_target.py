@@ -7,3 +7,8 @@ class LLMTarget(Enum):
     CODEX    = "codex"
     OPENCODE = "opencode"
     COPILOT  = "copilot"
+
+
+def parse_targets(value: str) -> list[LLMTarget]:
+    """Parse 'claude,gemini' → [LLMTarget.CLAUDE, LLMTarget.GEMINI]."""
+    return [LLMTarget(v.strip()) for v in value.split(",") if v.strip()]

@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from llm_eval import evaluate
+from llm_eval import evaluate, LLMTarget
 from llm_eval.job import Outcome, JobResult
 
 
@@ -24,12 +24,12 @@ def test_evaluate_calls_matching_callback(tmp_path):
     received = []
 
     outcomes = [
-        Outcome("complete",   "Done",      lambda r: received.append(r)),
-        Outcome("incomplete", "Has gaps",  _noop, output_files=["questions.txt"]),
+        Outcome("Done",      lambda r: received.append(r), status="complete"),
+        Outcome("Has gaps",  _noop, status="incomplete", output_files=["questions.txt"]),
     ]
 
     with patch("llm_eval.llm_svc.run_once", _fake_run_once_writing("complete")):
-        evaluate(target="claude", purpose="Review.", outcomes=outcomes, cwd=str(tmp_path))
+        evaluate(target=LLMTarget.CLAUDE, purpose="Review.", outcomes=outcomes, cwd=str(tmp_path))
 
     assert len(received) == 1
     assert received[0].status == "complete"
@@ -41,13 +41,13 @@ def test_evaluate_passes_files_to_callback(tmp_path):
     received = []
 
     outcomes = [
-        Outcome("incomplete", "Has gaps", lambda r: received.append(r),
-                output_files=["questions.txt"]),
+        Outcome("Has gaps", lambda r: received.append(r),
+                status="incomplete", output_files=["questions.txt"]),
     ]
 
     with patch("llm_eval.llm_svc.run_once",
                _fake_run_once_writing("incomplete", {"questions.txt": "Q1?"})):
-        evaluate(target="claude", purpose="Review.", outcomes=outcomes, cwd=str(tmp_path))
+        evaluate(target=LLMTarget.CLAUDE, purpose="Review.", outcomes=outcomes, cwd=str(tmp_path))
 
     assert received[0].files["questions.txt"] == "Q1?"
 
@@ -60,10 +60,10 @@ def test_evaluate_cleans_up_workspace_after_callback(tmp_path):
         (ws_path[0] / "status_complete").touch()
         return ""
 
-    outcomes = [Outcome("complete", "Done", _noop)]
+    outcomes = [Outcome("Done", _noop, status="complete")]
 
     with patch("llm_eval.llm_svc.run_once", capture_ws):
-        evaluate(target="claude", purpose=".", outcomes=outcomes, cwd=str(tmp_path))
+        evaluate(target=LLMTarget.CLAUDE, purpose=".", outcomes=outcomes, cwd=str(tmp_path))
 
     assert not ws_path[0].exists()
 
@@ -79,11 +79,11 @@ def test_evaluate_cleans_up_workspace_even_when_callback_raises(tmp_path):
     def raising_callback(r):
         raise ValueError("callback error")
 
-    outcomes = [Outcome("complete", "Done", raising_callback)]
+    outcomes = [Outcome("Done", raising_callback, status="complete")]
 
     with patch("llm_eval.llm_svc.run_once", capture_ws):
         with pytest.raises(ValueError, match="callback error"):
-            evaluate(target="claude", purpose=".", outcomes=outcomes, cwd=str(tmp_path))
+            evaluate(target=LLMTarget.CLAUDE, purpose=".", outcomes=outcomes, cwd=str(tmp_path))
 
     assert not ws_path[0].exists()
 
@@ -94,11 +94,11 @@ def test_evaluate_calls_on_exception_when_run_once_raises(tmp_path):
     def boom(target, prompt, **kwargs):
         raise RuntimeError("CLI not found")
 
-    outcomes = [Outcome("complete", "Done", _noop)]
+    outcomes = [Outcome("Done", _noop, status="complete")]
 
     with patch("llm_eval.llm_svc.run_once", boom):
         evaluate(
-            target="claude",
+            target=LLMTarget.CLAUDE,
             purpose=".",
             outcomes=outcomes,
             on_exception=lambda exc: errors.append(exc),
@@ -113,13 +113,8 @@ def test_evaluate_propagates_exception_when_no_on_exception(tmp_path):
     def boom(target, prompt, **kwargs):
         raise RuntimeError("CLI not found")
 
-    outcomes = [Outcome("complete", "Done", _noop)]
+    outcomes = [Outcome("Done", _noop, status="complete")]
 
     with patch("llm_eval.llm_svc.run_once", boom):
         with pytest.raises(RuntimeError, match="CLI not found"):
-            evaluate(target="claude", purpose=".", outcomes=outcomes, cwd=str(tmp_path))
-
-
-def test_evaluate_raises_on_invalid_target(tmp_path):
-    with pytest.raises(ValueError, match="Unsupported target"):
-        evaluate(target="nonexistent", purpose=".", outcomes=[])
+            evaluate(target=LLMTarget.CLAUDE, purpose=".", outcomes=outcomes, cwd=str(tmp_path))
