@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # 重要：OIDC 驗證必備權限
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -29,14 +32,10 @@ jobs:
 
       - name: Upload to Test PyPI
         if: github.event_name == 'workflow_dispatch'
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
-        run: twine upload --repository testpypi dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
 
       - name: Upload to PyPI
         if: github.event_name == 'release'
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
