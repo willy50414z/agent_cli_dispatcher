@@ -53,7 +53,7 @@ def test_resolve_collects_declared_output_file_content(tmp_path):
     (tmp_path / "questions.txt").write_text("Q1?")
     outcomes = [Outcome("gaps", _noop, status="incomplete", output_files=["questions.txt"])]
     _, result = resolve(tmp_path, outcomes, "id1", "claude", 1.0, "stdout")
-    assert result.files["questions.txt"] == "Q1?"
+    assert result.files["questions.txt"] == b"Q1?"
 
 
 def test_resolve_excludes_status_file_from_files_dict(tmp_path):

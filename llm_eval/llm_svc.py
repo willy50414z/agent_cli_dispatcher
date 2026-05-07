@@ -103,8 +103,11 @@ def run(
                        "--prompt", prompt_file.read_text(encoding=encoding)]
 
         elif target == LLMTarget.CODEX:
+            # Pass prompt via stdin to avoid Windows cmd line length limits (~8191 chars).
+            # codex reads stdin when no PROMPT arg is given (or arg is "-").
             command = [_resolve_cli("codex"), "exec", "--dangerously-bypass-approvals-and-sandbox",
-                       prompt_file.read_text(encoding=encoding).strip().replace("\n", " ")]
+                       "--skip-git-repo-check"]
+            stdin_input = prompt_file.read_text(encoding=encoding)
 
         elif target == LLMTarget.OPENCODE:
             env.setdefault("OPENCODE_PERMISSION", json.dumps(_ALLOW_ALL_OPENCODE_PERMISSION))
@@ -141,6 +144,7 @@ def run(
                     capture_output=True,
                     text=True,
                     encoding=encoding,
+                    errors="replace",
                     cwd=work_dir,
                     env=env,
                     timeout=timeout,

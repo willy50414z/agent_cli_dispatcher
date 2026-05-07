@@ -1,5 +1,9 @@
 README.md
 pyproject.toml
+agent_cli_dispatcher.egg-info/PKG-INFO
+agent_cli_dispatcher.egg-info/SOURCES.txt
+agent_cli_dispatcher.egg-info/dependency_links.txt
+agent_cli_dispatcher.egg-info/top_level.txt
 llm_eval/__init__.py
 llm_eval/job.py
 llm_eval/llm_svc.py
@@ -8,10 +12,7 @@ llm_eval/preflight.py
 llm_eval/prompt_builder.py
 llm_eval/status_resolver.py
 llm_eval/workspace.py
-llm_eval.egg-info/PKG-INFO
-llm_eval.egg-info/SOURCES.txt
-llm_eval.egg-info/dependency_links.txt
-llm_eval.egg-info/top_level.txt
+tests/test_codex_diagnose.py
 tests/test_evaluate.py
 tests/test_job.py
 tests/test_llm_target.py

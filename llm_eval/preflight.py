@@ -48,7 +48,7 @@ def _check_codex() -> TargetStatus:
             [binary, "login", "status"],
             capture_output=True, text=True, timeout=15, input="",
         )
-        if result.returncode == 0 and "Logged in" in result.stdout:
+        if result.returncode == 0 and "Logged in" in result.stderr:
             return TargetStatus(ok=True)
         reason = result.stderr.strip() or result.stdout.strip() or "not logged in"
         return TargetStatus(ok=False, reason=reason[:200])
@@ -96,3 +96,6 @@ def check_target(target: LLMTarget) -> TargetStatus:
 def check_all() -> dict[LLMTarget, TargetStatus]:
     """Check all known LLM targets. Always runs live; no caching."""
     return {target: checker() for target, checker in _CHECKERS.items()}
+
+if __name__ == '__main__':
+    _check_codex()

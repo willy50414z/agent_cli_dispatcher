@@ -49,7 +49,7 @@ def test_evaluate_passes_files_to_callback(tmp_path):
                _fake_run_once_writing("incomplete", {"questions.txt": "Q1?"})):
         evaluate(target=LLMTarget.CLAUDE, purpose="Review.", outcomes=outcomes, cwd=str(tmp_path))
 
-    assert received[0].files["questions.txt"] == "Q1?"
+    assert received[0].files["questions.txt"] == b"Q1?"
 
 
 def test_evaluate_cleans_up_workspace_after_callback(tmp_path):

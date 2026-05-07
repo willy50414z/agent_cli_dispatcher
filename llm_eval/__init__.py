@@ -1,6 +1,7 @@
 import logging
 import time
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Union
 
 from llm_eval import llm_svc
 from llm_eval.job import JobResult, Outcome
@@ -18,26 +19,42 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate(
-    target: LLMTarget,
-    purpose: str,
+    target: LLMTarget | None,
+    purpose: Union[str, Callable[[Path], str]],
     outcomes: list[Outcome],
     *,
+    targets: list[LLMTarget] | None = None,
     on_exception: Callable[[Exception], None] | None = None,
     model: str | None = None,
     timeout: float = 1800,
     cwd: str | None = None,
 ) -> None:
-    prompt = build_prompt(purpose, outcomes)
+    """Run an LLM evaluation against one or more targets.
+
+    Pass ``targets`` (list) to enable ordered fallback: each target is tried in
+    sequence and the next is used only when the previous raises LLMEvaluationError.
+    Pass ``target`` (single) for the original single-target behaviour.
+    Providing both raises ValueError; providing neither raises ValueError.
+
+    ``purpose`` may be a plain string or a callable that receives the workspace
+    Path and returns a string. Use the callable form when the prompt must embed
+    the workspace path as the LLM output directory so that resolve() can find
+    the files written by the LLM.
+    """
+    if targets is not None and target is not None:
+        raise ValueError("Provide either 'target' or 'targets', not both.")
+    _targets: list[LLMTarget] = targets if targets is not None else ([target] if target is not None else [])
+    if not _targets:
+        raise ValueError("evaluate() requires 'target' or 'targets'.")
+
     job_id, workspace = create_workspace(cwd)
+    purpose_str = purpose(workspace) if callable(purpose) else purpose
+    prompt = build_prompt(purpose_str, outcomes)
     start = time.monotonic()
 
     try:
-        stdout = llm_svc.run(
-            target,
-            prompt,
-            model=model,
-            cwd=str(workspace),
-            timeout=timeout,
+        stdout, winning_target = _run_with_fallback(
+            _targets, prompt, model=model, cwd=str(workspace), timeout=timeout
         )
     except Exception as exc:
         cleanup_workspace(workspace)
@@ -53,7 +70,7 @@ def evaluate(
             workspace=workspace,
             outcomes=outcomes,
             job_id=job_id,
-            target=target.value,
+            target=winning_target.value,
             duration_seconds=duration,
             stdout=stdout,
         )
@@ -70,3 +87,22 @@ def evaluate(
         matched_outcome.callback(result)
     finally:
         cleanup_workspace(workspace)
+
+
+def _run_with_fallback(
+    targets: list[LLMTarget],
+    prompt: str,
+    *,
+    model: str | None = None,
+    cwd: str | None = None,
+    timeout: float = 1800,
+) -> tuple[str, LLMTarget]:
+    """Try each target in order; return (stdout, winning_target) on first success."""
+    last_exc: llm_svc.LLMEvaluationError | None = None
+    for t in targets:
+        try:
+            return llm_svc.run(t, prompt, model=model, cwd=cwd, timeout=timeout), t
+        except llm_svc.LLMEvaluationError as exc:
+            logger.warning("evaluate fallback: %s failed, trying next. error: %s", t.value, exc)
+            last_exc = exc
+    raise last_exc  # type: ignore[misc]

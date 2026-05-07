@@ -35,7 +35,7 @@ def resolve(
         matched = error_outcome
         status_name = "error"
     else:
-        status_name = status_files[0].name[len("status_"):]
+        status_name = status_files[0].stem[len("status_"):]
         matched = next(
             (o for i, o in enumerate(outcomes) if effective_status(o, i) == status_name),
             None,
@@ -53,11 +53,8 @@ def resolve(
                 "but LLM did not create them."
             )
 
-    files: dict[str, str] = {
-        path.name: path.read_text(encoding="utf-8")
-        for path in workspace.iterdir()
-        if path.is_file() and not path.name.startswith("status_")
-    }
+    declared = matched.output_files or []
+    files: dict[str, bytes] = {f: (workspace / f).read_bytes() for f in declared}
 
     result = JobResult(
         job_id=job_id,

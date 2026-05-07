@@ -44,12 +44,12 @@ def test_job_result_stores_all_fields():
         status="complete",
         target="claude",
         duration_seconds=3.5,
-        files={"notes.txt": "hello"},
+        files={"notes.txt": b"hello"},
         stdout="raw output",
     )
     assert r.job_id == "abc123"
     assert r.status == "complete"
     assert r.target == "claude"
     assert r.duration_seconds == 3.5
-    assert r.files == {"notes.txt": "hello"}
+    assert r.files == {"notes.txt": b"hello"}
     assert r.stdout == "raw output"

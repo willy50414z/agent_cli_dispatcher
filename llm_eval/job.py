@@ -20,5 +20,5 @@ class JobResult:
     status: str
     target: str
     duration_seconds: float
-    files: dict[str, str]
+    files: dict[str, bytes]
     stdout: str

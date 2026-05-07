@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-eval"
+name = "agent-cli-dispatcher"
 version = "0.1.0"
 description = "Structured LLM task runner with outcome routing via file signals"
 requires-python = ">=3.11"
