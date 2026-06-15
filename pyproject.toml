@@ -9,6 +9,9 @@ description = "Structured LLM task runner with outcome routing via file signals"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+agent-dispatch = "llm_eval.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["llm_eval*"]

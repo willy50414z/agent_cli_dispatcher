@@ -1,6 +1,6 @@
 # llm-eval
 
-A Python library for running structured LLM tasks with outcome routing. Define what the agent should conclude, and receive a typed callback for whichever outcome the LLM signals — no polling, no parsing.
+A Python library for running structured LLM tasks with outcome routing. Define what the agent should conclude, and receive a typed callback for whichever outcome the LLM signals; no polling, no parsing.
 
 ## How it works
 
@@ -16,7 +16,13 @@ A Python library for running structured LLM tasks with outcome routing. Define w
 pip install -e .
 ```
 
-Requires Python ≥ 3.11. The LLM CLI tools must be installed separately and available on your `PATH` (e.g. `claude`, `gemini`, `codex`, `opencode`, `copilot`).
+Requires Python 3.11 or newer. The LLM CLI tools must be installed separately and available on your `PATH` (e.g. `claude`, `gemini`, `codex`, `opencode`, `copilot`).
+
+Editable or packaged installs expose the `agent-dispatch` command:
+
+```bash
+agent-dispatch --help
+```
 
 ## Quick start
 
@@ -65,21 +71,20 @@ evaluate(
 from llm_eval import evaluate, run, LLMTarget
 
 evaluate(
-    target,        # LLMTarget — LLM CLI to use (see Supported targets)
-    purpose,       # str — task description, embedded verbatim in the prompt
-    outcomes,      # list[Outcome] — possible conclusions the LLM can signal
+    target,        # LLMTarget: LLM CLI to use (see Supported targets)
+    purpose,       # str: task description, embedded verbatim in the prompt
+    outcomes,      # list[Outcome]: possible conclusions the LLM can signal
     *,
-    on_exception=None,  # Callable[[Exception], None] — called on subprocess failure
-    model=None,         # str | None — model override passed to the CLI
-    timeout=1800,       # float — subprocess timeout in seconds
-    cwd=None,           # str | None — base dir for the workspace (default: cwd)
+    on_exception=None,  # Callable[[Exception], None]: called on subprocess failure
+    model=None,         # str | None: model override passed to the CLI
+    timeout=1800,       # float: subprocess timeout in seconds
+    cwd=None,           # str | None: base dir for the workspace (default: cwd)
 )
 ```
 
-`evaluate()` is **synchronous and blocking**. For concurrent calls, manage threads or a process pool in the calling code.
+`evaluate()` is synchronous and blocking. For concurrent calls, manage threads or a process pool in the calling code.
 
-`outcomes` must contain at least one `Outcome`. Use `run()` when you only need the
-raw LLM response and do not need status-file routing or callbacks.
+`outcomes` must contain at least one `Outcome`. Use `run()` when you only need the raw LLM response and do not need status-file routing or callbacks.
 
 ### `run()`
 
@@ -92,9 +97,7 @@ answer = run(
 )
 ```
 
-`run()` sends the prompt directly to the selected LLM CLI and returns raw stdout
-as `str`. It does not create a workspace, inspect status files, or call outcome
-callbacks.
+`run()` sends the prompt directly to the selected LLM CLI and returns raw stdout as `str`. It does not create a workspace, inspect status files, or call outcome callbacks.
 
 #### Supported targets
 
@@ -105,6 +108,123 @@ callbacks.
 | `LLMTarget.CODEX` | `codex` |
 | `LLMTarget.OPENCODE` | `opencode` |
 | `LLMTarget.COPILOT` | `copilot` |
+| `LLMTarget.DEEPSEEK` | `claude` with DeepSeek Anthropic-compatible environment |
+
+## CLI
+
+### Raw prompt execution
+
+```bash
+agent-dispatch run --target deepseek --prompt "Explain this repository."
+```
+
+`run` writes only the model response to stdout on success.
+
+Prompt input can come from exactly one source:
+
+```bash
+agent-dispatch run --target deepseek --prompt "inline text"
+agent-dispatch run --target deepseek --prompt-file prompt.md
+type prompt.md | agent-dispatch run --target deepseek --stdin
+```
+
+Use `--targets` for ordered fallback. The first successful target wins:
+
+```bash
+agent-dispatch run --targets claude,deepseek --prompt-file prompt.md
+```
+
+`--target` and `--targets` are mutually exclusive.
+
+### Outcome-routed evaluation
+
+```bash
+agent-dispatch evaluate --target deepseek \
+  --purpose-file purpose.md \
+  --outcome complete="Implementation is complete" \
+  --outcome failed="Implementation failed or is incomplete" \
+  --output-file failed=errors.txt \
+  --json
+```
+
+`--outcome` uses `status=description` syntax and may be repeated. `--output-file` uses `status=path` syntax and declares text files that the selected outcome must write in the evaluation workspace.
+
+Successful `evaluate --json` writes one JSON object to stdout:
+
+```json
+{
+  "status": "complete",
+  "target": "deepseek",
+  "duration_seconds": 1.23,
+  "stdout": "raw model stdout",
+  "files": {
+    "errors.txt": "file content"
+  }
+}
+```
+
+File content is decoded as UTF-8 with replacement for invalid bytes.
+
+### OpenSpec delegation installer
+
+`pip install` only installs the package and CLI. It does not modify Codex skills,
+project rules, or user-level Codex configuration.
+
+To opt in for the current project, run:
+
+```bash
+agent-dispatch install_delegant --level 1
+```
+
+The command writes a managed OpenSpec delegation block to `AGENTS.md` in the
+target project. Re-running the command updates the managed block in place instead
+of duplicating it.
+
+Delegation levels:
+
+| Level | Behavior |
+|---|---|
+| `1` | Codex selectively delegates bounded, low-risk, verifiable tasks to submodels. This is the recommended default. |
+| `2` | Submodels draft or implement all eligible non-`codex-only` tasks first; Codex still integrates, verifies, and marks OpenSpec tasks complete. |
+
+For non-interactive setup, pass an explicit level. `--yes` uses the safe Level 1
+default:
+
+```bash
+agent-dispatch install_delegant --yes
+```
+
+Remove the managed project guidance with:
+
+```bash
+agent-dispatch install_delegant --uninstall
+```
+
+### Health checks
+
+```bash
+agent-dispatch health --json
+agent-dispatch health --target codex --json
+```
+
+Health output is JSON keyed by target name:
+
+```json
+{
+  "codex": {
+    "ok": true,
+    "reason": null
+  }
+}
+```
+
+### CLI exit codes
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Command succeeded and wrote result data to stdout |
+| `1` | Execution or runtime failure; diagnostic written to stderr |
+| `2` | Argument parsing or validation failure; diagnostic written to stderr |
 
 ### `Outcome`
 
@@ -112,10 +232,10 @@ callbacks.
 from llm_eval import Outcome
 
 Outcome(
-    status,        # str — identifier, e.g. "complete"
-    description,   # str — shown to the LLM: when should it pick this outcome
+    status,        # str: identifier, e.g. "complete"
+    description,   # str: shown to the LLM: when should it pick this outcome
     callback,      # Callable[[JobResult], None]
-    output_files=[], # list[str] — files the LLM must write for this outcome
+    output_files=[], # list[str]: files the LLM must write for this outcome
 )
 ```
 
