@@ -49,7 +49,7 @@ def evaluate(
 
     job_id, workspace = create_workspace(cwd)
     purpose_str = purpose(workspace) if callable(purpose) else purpose
-    prompt = build_prompt(purpose_str, outcomes)
+    prompt = build_prompt(purpose_str, outcomes, workspace=workspace)
     start = time.monotonic()
 
     try:

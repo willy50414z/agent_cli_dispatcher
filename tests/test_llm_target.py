@@ -8,6 +8,7 @@ def test_all_targets_accessible():
     assert LLMTarget.CODEX.value == "codex"
     assert LLMTarget.OPENCODE.value == "opencode"
     assert LLMTarget.COPILOT.value == "copilot"
+    assert LLMTarget.DEEPSEEK.value == "deepseek"
 
 
 def test_lookup_by_string():

@@ -85,6 +85,7 @@ _CHECKERS: dict[LLMTarget, Callable[[], TargetStatus]] = {
     LLMTarget.CODEX:    _check_codex,
     LLMTarget.OPENCODE: lambda: _check_via_version("opencode"),
     LLMTarget.COPILOT:  lambda: _check_via_version("copilot"),
+    LLMTarget.DEEPSEEK: lambda: TargetStatus(ok=True),
 }
 
 

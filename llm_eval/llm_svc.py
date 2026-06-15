@@ -35,6 +35,13 @@ _QUOTA_ERROR_PATTERNS: list[re.Pattern] = [
 
 _QUOTA_RETRY_INTERVAL_SECONDS: int = int(os.getenv("LLM_QUOTA_RETRY_INTERVAL", "300"))
 _QUOTA_MAX_RETRIES: int = int(os.getenv("LLM_QUOTA_MAX_RETRIES", "288"))
+_KEEP_IO: bool = os.getenv("LLM_KEEP_IO", "0").strip() == "1"
+
+# DeepSeek Anthropic-compatible API constants
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
+_DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-pro[1m]"
+_DEEPSEEK_SUBAGENT_MODEL = "deepseek-v4-flash"
+_DEEPSEEK_EFFORT_LEVEL = "max"
 
 _ALLOW_ALL_OPENCODE_PERMISSION = {
     "bash": "allow", "read": "allow", "edit": "allow", "task": "allow",
@@ -128,6 +135,27 @@ def run(
             if model:
                 command.extend(["--model", model])
 
+        elif target == LLMTarget.DEEPSEEK:
+            token = os.environ.get("DEEPSEEK_AUTH_TOKEN", "").strip()
+            if not token:
+                raise ValueError(
+                    "DEEPSEEK_AUTH_TOKEN environment variable is required for "
+                    "DEEPSEEK target. Set it to your DeepSeek API key."
+                )
+            env["ANTHROPIC_BASE_URL"] = _DEEPSEEK_BASE_URL
+            env["ANTHROPIC_AUTH_TOKEN"] = token
+            effective_model = model if model else _DEEPSEEK_DEFAULT_MODEL
+            env["ANTHROPIC_MODEL"] = effective_model
+            env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = effective_model
+            env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = effective_model
+            env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = _DEEPSEEK_SUBAGENT_MODEL
+            env["CLAUDE_CODE_SUBAGENT_MODEL"] = _DEEPSEEK_SUBAGENT_MODEL
+            env["CLAUDE_CODE_EFFORT_LEVEL"] = _DEEPSEEK_EFFORT_LEVEL
+            command = [_resolve_cli("claude"), "--print", "--dangerously-skip-permissions"]
+            if model:
+                command.extend(["--model", model])
+            stdin_input = prompt_file.read_text(encoding=encoding)
+
         else:
             raise ValueError(f"Unsupported LLM target: {target}")
 
@@ -208,8 +236,11 @@ def run(
         return output_file.read_text(encoding=encoding)
 
     finally:
-        prompt_file.unlink(missing_ok=True)
-        output_file.unlink(missing_ok=True)
+        if _KEEP_IO:
+            logger.debug("LLM_KEEP_IO=1: retaining %s and %s", prompt_file, output_file)
+        else:
+            prompt_file.unlink(missing_ok=True)
+            output_file.unlink(missing_ok=True)
 
 
 def run_with_fallback(

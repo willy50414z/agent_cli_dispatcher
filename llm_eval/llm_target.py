@@ -7,6 +7,7 @@ class LLMTarget(Enum):
     CODEX    = "codex"
     OPENCODE = "opencode"
     COPILOT  = "copilot"
+    DEEPSEEK = "deepseek"
 
 
 def parse_targets(value: str) -> list[LLMTarget]:
