@@ -12,7 +12,7 @@ from llm_eval.prompt_builder import build_prompt
 from llm_eval.status_resolver import resolve
 from llm_eval.workspace import cleanup_workspace, create_workspace
 
-__all__ = ["evaluate", "Outcome", "JobResult", "LLMTarget", "LLMEvaluationError",
+__all__ = ["evaluate", "run", "Outcome", "JobResult", "LLMTarget", "LLMEvaluationError",
            "check_target", "check_all", "TargetStatus", "parse_targets"]
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,8 @@ def evaluate(
     _targets: list[LLMTarget] = targets if targets is not None else ([target] if target is not None else [])
     if not _targets:
         raise ValueError("evaluate() requires 'target' or 'targets'.")
+    if not outcomes:
+        raise ValueError("outcomes must not be empty.")
 
     job_id, workspace = create_workspace(cwd)
     purpose_str = purpose(workspace) if callable(purpose) else purpose
@@ -87,6 +89,26 @@ def evaluate(
         matched_outcome.callback(result)
     finally:
         cleanup_workspace(workspace)
+
+
+def run(
+    target: LLMTarget | None = None,
+    prompt: str = "",
+    *,
+    targets: list[LLMTarget] | None = None,
+    model: str | None = None,
+    timeout: float = 1800,
+    cwd: str | None = None,
+) -> str:
+    """Run a raw LLM prompt and return stdout without outcome routing."""
+    if targets is not None and target is not None:
+        raise ValueError("Provide either 'target' or 'targets', not both.")
+    _targets: list[LLMTarget] = targets if targets is not None else ([target] if target is not None else [])
+    if not _targets:
+        raise ValueError("run() requires 'target' or 'targets'.")
+    if len(_targets) == 1:
+        return llm_svc.run(_targets[0], prompt, model=model, cwd=cwd, timeout=timeout)
+    return llm_svc.run_with_fallback(_targets, prompt, model=model, cwd=cwd, timeout=timeout)
 
 
 def _run_with_fallback(

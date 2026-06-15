@@ -62,7 +62,7 @@ evaluate(
 ### `evaluate()`
 
 ```python
-from llm_eval import evaluate, LLMTarget
+from llm_eval import evaluate, run, LLMTarget
 
 evaluate(
     target,        # LLMTarget — LLM CLI to use (see Supported targets)
@@ -77,6 +77,24 @@ evaluate(
 ```
 
 `evaluate()` is **synchronous and blocking**. For concurrent calls, manage threads or a process pool in the calling code.
+
+`outcomes` must contain at least one `Outcome`. Use `run()` when you only need the
+raw LLM response and do not need status-file routing or callbacks.
+
+### `run()`
+
+```python
+from llm_eval import run, LLMTarget
+
+answer = run(
+    target=LLMTarget.CLAUDE,
+    prompt="Explain the difference between latency and throughput.",
+)
+```
+
+`run()` sends the prompt directly to the selected LLM CLI and returns raw stdout
+as `str`. It does not create a workspace, inspect status files, or call outcome
+callbacks.
 
 #### Supported targets
 

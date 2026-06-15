@@ -48,7 +48,8 @@ def _check_codex() -> TargetStatus:
             [binary, "login", "status"],
             capture_output=True, text=True, timeout=15, input="",
         )
-        if result.returncode == 0 and "Logged in" in result.stderr:
+        auth_output = f"{result.stdout}\n{result.stderr}"
+        if result.returncode == 0 and "Logged in" in auth_output:
             return TargetStatus(ok=True)
         reason = result.stderr.strip() or result.stdout.strip() or "not logged in"
         return TargetStatus(ok=False, reason=reason[:200])
