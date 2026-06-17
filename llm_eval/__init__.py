@@ -26,6 +26,7 @@ def evaluate(
     targets: list[LLMTarget] | None = None,
     on_exception: Callable[[Exception], None] | None = None,
     model: str | None = None,
+    effort: str | None = None,
     timeout: float = 1800,
     cwd: str | None = None,
 ) -> None:
@@ -56,7 +57,7 @@ def evaluate(
 
     try:
         stdout, winning_target = _run_with_fallback(
-            _targets, prompt, model=model, cwd=str(workspace), timeout=timeout
+            _targets, prompt, model=model, effort=effort, cwd=str(workspace), timeout=timeout
         )
     except Exception as exc:
         cleanup_workspace(workspace)
@@ -97,6 +98,7 @@ def run(
     *,
     targets: list[LLMTarget] | None = None,
     model: str | None = None,
+    effort: str | None = None,
     timeout: float = 1800,
     cwd: str | None = None,
 ) -> str:
@@ -107,8 +109,8 @@ def run(
     if not _targets:
         raise ValueError("run() requires 'target' or 'targets'.")
     if len(_targets) == 1:
-        return llm_svc.run(_targets[0], prompt, model=model, cwd=cwd, timeout=timeout)
-    return llm_svc.run_with_fallback(_targets, prompt, model=model, cwd=cwd, timeout=timeout)
+        return llm_svc.run(_targets[0], prompt, model=model, effort=effort, cwd=cwd, timeout=timeout)
+    return llm_svc.run_with_fallback(_targets, prompt, model=model, effort=effort, cwd=cwd, timeout=timeout)
 
 
 def _run_with_fallback(
@@ -116,6 +118,7 @@ def _run_with_fallback(
     prompt: str,
     *,
     model: str | None = None,
+    effort: str | None = None,
     cwd: str | None = None,
     timeout: float = 1800,
 ) -> tuple[str, LLMTarget]:
@@ -123,7 +126,7 @@ def _run_with_fallback(
     last_exc: llm_svc.LLMEvaluationError | None = None
     for t in targets:
         try:
-            return llm_svc.run(t, prompt, model=model, cwd=cwd, timeout=timeout), t
+            return llm_svc.run(t, prompt, model=model, effort=effort, cwd=cwd, timeout=timeout), t
         except llm_svc.LLMEvaluationError as exc:
             logger.warning("evaluate fallback: %s failed, trying next. error: %s", t.value, exc)
             last_exc = exc

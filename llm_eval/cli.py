@@ -124,6 +124,7 @@ def _add_input_args(parser: argparse.ArgumentParser, name: str) -> None:
 
 def _add_common_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model")
+    parser.add_argument("--effort")
     parser.add_argument("--timeout", type=float, default=1800)
     parser.add_argument("--cwd")
 
@@ -136,6 +137,7 @@ def _handle_run(args: argparse.Namespace) -> int:
         targets=targets,
         prompt=prompt,
         model=args.model,
+        effort=args.effort,
         timeout=args.timeout,
         cwd=args.cwd,
     )
@@ -153,6 +155,7 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
         purpose,
         outcomes,
         model=args.model,
+        effort=args.effort,
         timeout=args.timeout,
         cwd=args.cwd,
     )
@@ -299,6 +302,7 @@ def _execute_evaluate(
     outcomes: list[Outcome],
     *,
     model: str | None = None,
+    effort: str | None = None,
     timeout: float = 1800,
     cwd: str | None = None,
 ) -> JobResult:
@@ -310,7 +314,7 @@ def _execute_evaluate(
     start = time.monotonic()
     try:
         stdout, winning_target = _run_with_fallback(
-            targets, prompt, model=model, cwd=str(workspace), timeout=timeout
+            targets, prompt, model=model, effort=effort, cwd=str(workspace), timeout=timeout
         )
         duration = time.monotonic() - start
         _matched, result = resolve(
@@ -331,13 +335,14 @@ def _run_with_fallback(
     prompt: str,
     *,
     model: str | None,
+    effort: str | None = None,
     cwd: str,
     timeout: float,
 ) -> tuple[str, LLMTarget]:
     last_exc: llm_svc.LLMEvaluationError | None = None
     for target in targets:
         try:
-            return llm_svc.run(target, prompt, model=model, cwd=cwd, timeout=timeout), target
+            return llm_svc.run(target, prompt, model=model, effort=effort, cwd=cwd, timeout=timeout), target
         except llm_svc.LLMEvaluationError as exc:
             last_exc = exc
     raise last_exc  # type: ignore[misc]

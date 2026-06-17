@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -39,6 +39,7 @@ def test_run_with_inline_prompt(capsys):
         targets=None,
         prompt="hello",
         model=None,
+        effort=None,
         timeout=1800,
         cwd=None,
     )
@@ -517,3 +518,143 @@ def test_interactive_mode_selection_invalid_rejected(monkeypatch, tmp_path, caps
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "mode must be A, B, or C" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: CLI → subprocess model/effort parameter passing
+# ---------------------------------------------------------------------------
+
+
+def _assert_sequence_in_list(expected: list[str], actual: list[str]) -> None:
+    """Assert that expected items appear in actual list in order (subsequence)."""
+    idx = 0
+    for item in expected:
+        try:
+            idx = actual.index(item, idx)
+        except ValueError:
+            raise AssertionError(
+                f"Expected {item!r} not found in {actual!r} at or after index {idx}"
+            )
+
+
+class TestModelEffortIntegration:
+    """Verify CLI arguments reach subprocess.run with correct commands and env vars."""
+
+    @pytest.mark.parametrize(
+        "cli_args,expected_cmd_elems,expected_env,expected_stdin",
+        [
+            # 4.2: Claude target with --model claude-opus-4-8
+            (
+                ["run", "--target", "claude", "--model", "claude-opus-4-8", "--prompt", "hello"],
+                ["claude", "--print", "--dangerously-skip-permissions", "--model", "claude-opus-4-8"],
+                {},
+                "hello",
+            ),
+            # 4.3: Codex target with --model gpt-5.5 --effort xhigh
+            (
+                ["run", "--target", "codex", "--model", "gpt-5.5", "--effort", "xhigh", "--prompt", "hello"],
+                ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox",
+                 "--skip-git-repo-check", "--model", "gpt-5.5", "-c", "model_reasoning_effort=xhigh"],
+                {},
+                "hello",
+            ),
+            # 4.4: Codex target with --model gpt-5.5 --effort high
+            (
+                ["run", "--target", "codex", "--model", "gpt-5.5", "--effort", "high", "--prompt", "hello"],
+                ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox",
+                 "--skip-git-repo-check", "--model", "gpt-5.5", "-c", "model_reasoning_effort=high"],
+                {},
+                "hello",
+            ),
+            # 4.5: DeepSeek target with --model deepseek-v4-pro[1m]
+            (
+                ["run", "--target", "deepseek", "--model", "deepseek-v4-pro[1m]", "--prompt", "hello"],
+                ["claude", "--print", "--dangerously-skip-permissions", "--model", "deepseek-v4-pro[1m]"],
+                {"ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+                 "ANTHROPIC_MODEL": "deepseek-v4-pro[1m]"},
+                "hello",
+            ),
+            # 4.6: DeepSeek target without --model uses default
+            (
+                ["run", "--target", "deepseek", "--prompt", "hello"],
+                ["claude", "--print", "--dangerously-skip-permissions"],
+                {"ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+                 "ANTHROPIC_MODEL": "deepseek-v4-pro[1m]"},
+                "hello",
+            ),
+        ],
+    )
+    def test_model_effort_passed_to_subprocess(
+        self, tmp_path, capsys, monkeypatch,
+        cli_args, expected_cmd_elems, expected_env, expected_stdin,
+    ):
+        """CLI model/effort args are forwarded to the correct subprocess command and env."""
+        # DeepSeek requires DEEPSEEK_AUTH_TOKEN
+        monkeypatch.setenv("DEEPSEEK_AUTH_TOKEN", "test-token")
+
+        # Mock _resolve_cli to return bare command names (environment-independent)
+        def _fake_resolve(name: str) -> str:
+            return name
+
+        mock_completed = MagicMock()
+        mock_completed.returncode = 0
+        mock_completed.stdout = "mock response"
+        mock_completed.stderr = ""
+
+        with patch("llm_eval.llm_svc._resolve_cli", side_effect=_fake_resolve):
+            with patch("llm_eval.llm_svc.subprocess.run", return_value=mock_completed) as mock_run:
+                exit_code = cli.main(cli_args + ["--cwd", str(tmp_path)])
+
+        assert exit_code == 0
+        assert capsys.readouterr().out == "mock response"
+
+        mock_run.assert_called_once()
+        actual_cmd = mock_run.call_args[0][0]
+        _assert_sequence_in_list(expected_cmd_elems, actual_cmd)
+
+        actual_env = mock_run.call_args.kwargs.get("env", {})
+        for key, value in expected_env.items():
+            assert actual_env.get(key) == value, f"env {key}: expected {value!r}, got {actual_env.get(key)!r}"
+
+        assert mock_run.call_args.kwargs.get("input") == expected_stdin
+
+    # 4.7: Prompt text passed as stdin to subprocess.run
+    def test_prompt_passed_as_stdin(self, tmp_path, capsys):
+        def _fake_resolve(name: str) -> str:
+            return name
+
+        mock_completed = MagicMock()
+        mock_completed.returncode = 0
+        mock_completed.stdout = "mock response"
+        mock_completed.stderr = ""
+
+        with patch("llm_eval.llm_svc._resolve_cli", side_effect=_fake_resolve):
+            with patch("llm_eval.llm_svc.subprocess.run", return_value=mock_completed) as mock_run:
+                exit_code = cli.main(
+                    ["run", "--target", "claude", "--prompt", "hello world", "--cwd", str(tmp_path)]
+                )
+
+        assert exit_code == 0
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("input") == "hello world"
+
+    # 4.7 (additional): verify effort config not passed when omitted
+    def test_codex_without_effort_omits_flag(self, tmp_path, capsys):
+        def _fake_resolve(name: str) -> str:
+            return name
+
+        mock_completed = MagicMock()
+        mock_completed.returncode = 0
+        mock_completed.stdout = "mock response"
+        mock_completed.stderr = ""
+
+        with patch("llm_eval.llm_svc._resolve_cli", side_effect=_fake_resolve):
+            with patch("llm_eval.llm_svc.subprocess.run", return_value=mock_completed) as mock_run:
+                exit_code = cli.main(
+                    ["run", "--target", "codex", "--prompt", "hello", "--cwd", str(tmp_path)]
+                )
+
+        assert exit_code == 0
+        actual_cmd = mock_run.call_args[0][0]
+        assert "model_reasoning_effort" not in str(actual_cmd)
+        assert "--model" not in actual_cmd

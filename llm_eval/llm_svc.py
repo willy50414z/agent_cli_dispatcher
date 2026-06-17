@@ -73,6 +73,7 @@ def run(
     prompt: str,
     *,
     model: str | None = None,
+    effort: str | None = None,
     cwd: str | None = None,
     timeout: float | None = 1800,
     encoding: str = "utf-8",
@@ -114,6 +115,10 @@ def run(
             # codex reads stdin when no PROMPT arg is given (or arg is "-").
             command = [_resolve_cli("codex"), "exec", "--dangerously-bypass-approvals-and-sandbox",
                        "--skip-git-repo-check"]
+            if model:
+                command.extend(["--model", model])
+            if effort:
+                command.extend(["-c", f"model_reasoning_effort={effort}"])
             stdin_input = prompt_file.read_text(encoding=encoding)
 
         elif target == LLMTarget.OPENCODE:
@@ -248,6 +253,7 @@ def run_with_fallback(
     prompt: str,
     *,
     model: str | None = None,
+    effort: str | None = None,
     cwd: str | None = None,
     timeout: float | None = 1800,
     encoding: str = "utf-8",
@@ -257,7 +263,7 @@ def run_with_fallback(
     last_exc: LLMEvaluationError | None = None
     for target in targets:
         try:
-            return run(target, prompt, model=model, cwd=cwd, timeout=timeout, encoding=encoding)
+            return run(target, prompt, model=model, effort=effort, cwd=cwd, timeout=timeout, encoding=encoding)
         except LLMEvaluationError as exc:
             logger.warning("run_with_fallback: %s failed, trying next. error: %s", target.value, exc)
             last_exc = exc
