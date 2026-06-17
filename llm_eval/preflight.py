@@ -82,10 +82,10 @@ def _check_via_version(tool: str) -> TargetStatus:
 
 _CHECKERS: dict[LLMTarget, Callable[[], TargetStatus]] = {
     LLMTarget.CLAUDE:   _check_claude,
-    LLMTarget.GEMINI:   lambda: _check_via_version("gemini"),
+    # LLMTarget.GEMINI:   lambda: _check_via_version("gemini"),    # untested — coming soon
     LLMTarget.CODEX:    _check_codex,
-    LLMTarget.OPENCODE: lambda: _check_via_version("opencode"),
-    LLMTarget.COPILOT:  lambda: _check_via_version("copilot"),
+    # LLMTarget.OPENCODE: lambda: _check_via_version("opencode"),  # untested — coming soon
+    # LLMTarget.COPILOT:  lambda: _check_via_version("copilot"),   # untested — coming soon
     LLMTarget.DEEPSEEK: lambda: TargetStatus(ok=True),
 }
 

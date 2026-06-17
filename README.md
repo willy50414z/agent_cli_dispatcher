@@ -16,7 +16,7 @@ A Python library for running structured LLM tasks with outcome routing. Define w
 pip install -e .
 ```
 
-Requires Python 3.11 or newer. The LLM CLI tools must be installed separately and available on your `PATH` (e.g. `claude`, `gemini`, `codex`, `opencode`, `copilot`).
+Requires Python 3.11 or newer. The LLM CLI tools (`claude`, `codex`) must be installed separately and available on your `PATH`. DeepSeek uses the `claude` CLI with a `DEEPSEEK_AUTH_TOKEN` environment variable.
 
 Editable or packaged installs expose the `agent-dispatch` command:
 
@@ -77,6 +77,7 @@ evaluate(
     *,
     on_exception=None,  # Callable[[Exception], None]: called on subprocess failure
     model=None,         # str | None: model override passed to the CLI
+    effort=None,        # str | None: reasoning effort (codex only: xhigh/high/medium/low)
     timeout=1800,       # float: subprocess timeout in seconds
     cwd=None,           # str | None: base dir for the workspace (default: cwd)
 )
@@ -101,14 +102,14 @@ answer = run(
 
 #### Supported targets
 
-| `LLMTarget` member | CLI binary |
-|---|---|
-| `LLMTarget.CLAUDE` | `claude` |
-| `LLMTarget.GEMINI` | `gemini` |
-| `LLMTarget.CODEX` | `codex` |
-| `LLMTarget.OPENCODE` | `opencode` |
-| `LLMTarget.COPILOT` | `copilot` |
-| `LLMTarget.DEEPSEEK` | `claude` with DeepSeek Anthropic-compatible environment |
+| `LLMTarget` member | CLI binary | Status |
+|---|---|---|
+| `LLMTarget.CLAUDE` | `claude` | ✅ Tested |
+| `LLMTarget.CODEX` | `codex` | ✅ Tested |
+| `LLMTarget.DEEPSEEK` | `claude` with DeepSeek Anthropic-compatible environment | ✅ Tested |
+| `LLMTarget.GEMINI` | `gemini` | 🔜 Coming soon |
+| `LLMTarget.OPENCODE` | `opencode` | 🔜 Coming soon |
+| `LLMTarget.COPILOT` | `copilot` | 🔜 Coming soon |
 
 ## CLI
 
@@ -116,6 +117,14 @@ answer = run(
 
 ```bash
 agent-dispatch run --target deepseek --prompt "Explain this repository."
+```
+
+Specify model and effort (Codex only for effort):
+
+```bash
+agent-dispatch run --target claude --model claude-opus-4-8 --prompt "Review this code."
+agent-dispatch run --target codex --model gpt-5.5 --effort xhigh --prompt "Optimize this function."
+agent-dispatch run --target deepseek --model deepseek-v4-pro[1m] --prompt "Summarize."
 ```
 
 `run` writes only the model response to stdout on success.

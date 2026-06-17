@@ -43,13 +43,14 @@ _DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-pro[1m]"
 _DEEPSEEK_SUBAGENT_MODEL = "deepseek-v4-flash"
 _DEEPSEEK_EFFORT_LEVEL = "max"
 
-_ALLOW_ALL_OPENCODE_PERMISSION = {
-    "bash": "allow", "read": "allow", "edit": "allow", "task": "allow",
-    "glob": "allow", "grep": "allow", "list": "allow",
-    "external_directory": "allow", "todowrite": "allow", "todoread": "allow",
-    "question": "allow", "webfetch": "allow", "websearch": "allow",
-    "codesearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow",
-}
+# OPENCODE: untested — coming soon
+# _ALLOW_ALL_OPENCODE_PERMISSION = {
+#     "bash": "allow", "read": "allow", "edit": "allow", "task": "allow",
+#     "glob": "allow", "grep": "allow", "list": "allow",
+#     "external_directory": "allow", "todowrite": "allow", "todoread": "allow",
+#     "question": "allow", "webfetch": "allow", "websearch": "allow",
+#     "codesearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow",
+# }
 
 
 def _is_quota_error(text: str) -> bool:
@@ -106,9 +107,10 @@ def run(
                 command.extend(["--model", model])
             stdin_input = prompt_file.read_text(encoding=encoding)
 
-        elif target == LLMTarget.GEMINI:
-            command = [_resolve_cli("gemini"), "--approval-mode", "auto_edit",
-                       "--prompt", prompt_file.read_text(encoding=encoding)]
+        # GEMINI: untested — coming soon
+        # elif target == LLMTarget.GEMINI:
+        #     command = [_resolve_cli("gemini"), "--approval-mode", "auto_edit",
+        #                "--prompt", prompt_file.read_text(encoding=encoding)]
 
         elif target == LLMTarget.CODEX:
             # Pass prompt via stdin to avoid Windows cmd line length limits (~8191 chars).
@@ -121,24 +123,26 @@ def run(
                 command.extend(["-c", f"model_reasoning_effort={effort}"])
             stdin_input = prompt_file.read_text(encoding=encoding)
 
-        elif target == LLMTarget.OPENCODE:
-            env.setdefault("OPENCODE_PERMISSION", json.dumps(_ALLOW_ALL_OPENCODE_PERMISSION))
-            runtime_root = Path(effective_dir).resolve() / "data" / "tool-runtime" / "opencode"
-            for subdir in ("config", "data", "state"):
-                (runtime_root / subdir).mkdir(parents=True, exist_ok=True)
-            env.setdefault("XDG_CONFIG_HOME", str(runtime_root / "config"))
-            env.setdefault("XDG_DATA_HOME",   str(runtime_root / "data"))
-            env.setdefault("XDG_STATE_HOME",  str(runtime_root / "state"))
-            command = [_resolve_cli("opencode"), "run",
-                       "--dir", effective_dir, "--format", "json", "-"]
-            stdin_input = prompt_file.read_text(encoding=encoding)
+        # OPENCODE: untested — coming soon
+        # elif target == LLMTarget.OPENCODE:
+        #     env.setdefault("OPENCODE_PERMISSION", json.dumps(_ALLOW_ALL_OPENCODE_PERMISSION))
+        #     runtime_root = Path(effective_dir).resolve() / "data" / "tool-runtime" / "opencode"
+        #     for subdir in ("config", "data", "state"):
+        #         (runtime_root / subdir).mkdir(parents=True, exist_ok=True)
+        #     env.setdefault("XDG_CONFIG_HOME", str(runtime_root / "config"))
+        #     env.setdefault("XDG_DATA_HOME",   str(runtime_root / "data"))
+        #     env.setdefault("XDG_STATE_HOME",  str(runtime_root / "state"))
+        #     command = [_resolve_cli("opencode"), "run",
+        #                "--dir", effective_dir, "--format", "json", "-"]
+        #     stdin_input = prompt_file.read_text(encoding=encoding)
 
-        elif target == LLMTarget.COPILOT:
-            command = [_resolve_cli("copilot"), "-p", prompt_file.read_text(encoding=encoding),
-                       "--allow-all", "--no-ask-user", "--output-format", "text", "--silent",
-                       "--add-dir", effective_dir]
-            if model:
-                command.extend(["--model", model])
+        # COPILOT: untested — coming soon
+        # elif target == LLMTarget.COPILOT:
+        #     command = [_resolve_cli("copilot"), "-p", prompt_file.read_text(encoding=encoding),
+        #                "--allow-all", "--no-ask-user", "--output-format", "text", "--silent",
+        #                "--add-dir", effective_dir]
+        #     if model:
+        #         command.extend(["--model", model])
 
         elif target == LLMTarget.DEEPSEEK:
             token = os.environ.get("DEEPSEEK_AUTH_TOKEN", "").strip()
@@ -216,25 +220,26 @@ def run(
 
         raw_stdout = (completed.stdout or "").strip()
 
-        if target == LLMTarget.OPENCODE and raw_stdout:
-            try:
-                chunks = []
-                for line in raw_stdout.splitlines():
-                    if not line.strip():
-                        continue
-                    event = json.loads(line)
-                    if event.get("type") == "error":
-                        msg = (event.get("error") or {}).get("data", {}).get("message", "")
-                        raise RuntimeError(str(msg))
-                    message = event.get("message")
-                    if isinstance(message, dict):
-                        for item in (message.get("content") or []):
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                chunks.append(str(item["text"]))
-                if chunks:
-                    raw_stdout = "\n".join(chunks).strip()
-            except json.JSONDecodeError:
-                pass
+        # OPENCODE: untested — coming soon
+        # if target == LLMTarget.OPENCODE and raw_stdout:
+        #     try:
+        #         chunks = []
+        #         for line in raw_stdout.splitlines():
+        #             if not line.strip():
+        #                 continue
+        #             event = json.loads(line)
+        #             if event.get("type") == "error":
+        #                 msg = (event.get("error") or {}).get("data", {}).get("message", "")
+        #                 raise RuntimeError(str(msg))
+        #             message = event.get("message")
+        #             if isinstance(message, dict):
+        #                 for item in (message.get("content") or []):
+        #                     if isinstance(item, dict) and item.get("type") == "text":
+        #                         chunks.append(str(item["text"]))
+        #         if chunks:
+        #             raw_stdout = "\n".join(chunks).strip()
+        #     except json.JSONDecodeError:
+        #         pass
 
         logger.info("run [%s] done. stdout_len=%d", target.value, len(raw_stdout))
         output_file.write_text(raw_stdout, encoding=encoding)
