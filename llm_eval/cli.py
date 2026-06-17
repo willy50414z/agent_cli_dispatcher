@@ -65,15 +65,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Install project-local OpenSpec delegation guidance.",
     )
     install_parser.add_argument(
+        "--mode",
+        choices=["main", "hybrid", "delegated-apply"],
+        help="Delegation mode: main (all work stays with main model), "
+        "hybrid (main model plans/integrates, submodels handle bounded work), "
+        "delegated-apply (main model delegates apply and verifies).",
+    )
+    install_parser.add_argument(
         "--level",
         type=int,
         choices=[1, 2],
-        help="Delegation level: 1 selective Codex routing, 2 submodel-first drafts.",
+        help="(Deprecated) Delegation level: 1 maps to hybrid, 2 maps to delegated-apply. "
+        "Use --mode instead.",
     )
     install_parser.add_argument(
         "--yes",
         action="store_true",
-        help="Use the safe non-interactive default when --level is omitted.",
+        help="Use the recommended hybrid mode default in non-interactive mode.",
     )
     install_parser.add_argument(
         "--cwd",
@@ -162,6 +170,52 @@ def _handle_health(args: argparse.Namespace) -> int:
     return 0
 
 
+_LEVEL_TO_MODE = {1: "hybrid", 2: "delegated-apply"}
+
+
+def _resolve_mode(args: argparse.Namespace) -> str:
+    provided_mode = args.mode
+    provided_level = args.level
+
+    if provided_level is not None:
+        mapped_mode = _LEVEL_TO_MODE[provided_level]
+        if provided_mode is not None and provided_mode != mapped_mode:
+            raise ValueError(
+                f"--mode {provided_mode} and --level {provided_level} are incompatible. "
+                f"Level {provided_level} maps to '{mapped_mode}'. "
+                f"Use only --mode."
+            )
+        return mapped_mode
+
+    if provided_mode is not None:
+        return provided_mode
+
+    return _select_install_mode(args.yes)
+
+
+def _select_install_mode(use_default: bool) -> str:
+    if use_default:
+        return "hybrid"
+    if not sys.stdin.isatty():
+        raise ValueError(
+            "install_delegant requires --mode in non-interactive mode. "
+            "Use --yes for the recommended hybrid default."
+        )
+
+    print("Select OpenSpec delegation mode:")
+    print("A) main — all apply work stays with the main model")
+    print("B) hybrid — main model plans/integrates/validates; submodels handle bounded work (recommended)")
+    print("C) delegated-apply — main model delegates apply to a submodel and verifies completion")
+    choice = input("Mode [A/B/C]: ").strip().upper()
+    if choice == "A":
+        return "main"
+    elif choice == "B":
+        return "hybrid"
+    elif choice == "C":
+        return "delegated-apply"
+    raise ValueError("mode must be A, B, or C")
+
+
 def _handle_install_delegant(args: argparse.Namespace) -> int:
     project_dir = args.cwd if args.cwd else Path.cwd()
     if args.uninstall:
@@ -169,27 +223,12 @@ def _handle_install_delegant(args: argparse.Namespace) -> int:
         print(f"OpenSpec delegation guidance {result.action}: {result.path}")
         return 0
 
-    level = args.level if args.level is not None else _select_install_level(args.yes)
-    result = install_project_guidance(project_dir, level)
+    mode = _resolve_mode(args)
+    result = install_project_guidance(project_dir, mode)
     print(f"OpenSpec delegation guidance {result.action}: {result.path}")
-    print(f"Delegation level: {result.level}")
+    print(f"Delegation mode: {result.mode}")
     print("Scope: project-local")
     return 0
-
-
-def _select_install_level(use_default: bool) -> int:
-    if use_default:
-        return 1
-    if not sys.stdin.isatty():
-        raise ValueError("install_delegant requires --level in non-interactive mode")
-
-    print("Select OpenSpec delegation level:")
-    print("1) Codex selectively delegates suitable tasks")
-    print("2) Submodel-first drafts for eligible non-codex-only tasks")
-    choice = input("Level [1/2]: ").strip()
-    if choice not in {"1", "2"}:
-        raise ValueError("level must be 1 or 2")
-    return int(choice)
 
 
 def _load_input(args: argparse.Namespace) -> str:

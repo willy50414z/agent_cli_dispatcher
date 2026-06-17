@@ -173,26 +173,72 @@ project rules, or user-level Codex configuration.
 To opt in for the current project, run:
 
 ```bash
-agent-dispatch install_delegant --level 1
+agent-dispatch install_delegant --mode hybrid
 ```
 
 The command writes a managed OpenSpec delegation block to `AGENTS.md` in the
 target project. Re-running the command updates the managed block in place instead
 of duplicating it.
 
-Delegation levels:
+Delegation modes:
 
-| Level | Behavior |
+| Mode | Label | Behavior |
+|---|---|---|
+| `main` | A | All OpenSpec apply work stays with the main model. Submodels are not used unless the user explicitly asks. |
+| `hybrid` | B | **Recommended.** Propose-time task routing plus delegation-first apply for tagged work. Main model owns scope, integration, final verification, and OpenSpec state; DeepSeek handles delegated implementation/test/review/diagnosis drafts first. |
+| `delegated-apply` | C | Main model delegates apply implementation to a submodel and verifies task completion, tests, and spec alignment afterward. Aggressive mode - may increase total token usage. |
+
+#### Hybrid mode responsibility split
+
+Mode B (`hybrid`) is the recommended delegation-first cost-control default. It
+requires propose-time task routing and apply-time delegation attempts for tagged
+work:
+
+| Main model owns | Delegants are assigned |
 |---|---|
-| `1` | Codex selectively delegates bounded, low-risk, verifiable tasks to submodels. This is the recommended default. |
-| `2` | Submodels draft or implement all eligible non-`codex-only` tasks first; Codex still integrates, verifies, and marks OpenSpec tasks complete. |
+| OpenSpec interpretation, scope, and architecture decisions | Implementation drafts with clear file scope |
+| Security, data migration, destructive ops, credentials | Small-scope tests and test suggestions |
+| High-risk exception decisions | Documentation reading, extraction, and summaries |
+| Integration of delegated output | Repetitive edits |
+| Large feature acceptance and final tests | Failure diagnosis |
+| `tasks.md` checkbox updates | First-pass diff/spec review |
+| Final verification and OpenSpec state changes | |
 
-For non-interactive setup, pass an explicit level. `--yes` uses the safe Level 1
-default:
+Hybrid routing rules:
+
+- During OpenSpec propose, delegate-friendly implementation, test, review,
+  documentation extraction, repetitive edit, and diagnosis work must be split
+  into standalone task packets with `context`, `output`, and `verify` notes.
+- During apply, Codex must attempt delegation for every `[delegate:deepseek]`,
+  `[delegate:test]`, and `[delegate:review]` task before implementing it
+  directly.
+- `agent-dispatch run --target deepseek --prompt-file <packet>` is the default
+  shell delegation path unless a task packet names another target or DeepSeek is
+  unavailable.
+- Codex may skip or take over only when the task is high-risk, needs broad repo
+  context, the delegation backend is unavailable, or one delegated attempt
+  returns unusable output. "It is faster for Codex" is not a skip reason.
+- Codex still integrates delegated output, runs final verification, and is the
+  only actor that marks OpenSpec tasks complete.
+
+For non-interactive setup, pass an explicit mode. `--yes` uses the hybrid default:
 
 ```bash
 agent-dispatch install_delegant --yes
 ```
+
+#### Compatibility: `--level`
+
+The deprecated `--level` flag is preserved for existing scripts. Level 1 maps to
+`hybrid` and level 2 maps to `delegated-apply`:
+
+```bash
+agent-dispatch install_delegant --level 1   # equivalent to --mode hybrid
+agent-dispatch install_delegant --level 2   # equivalent to --mode delegated-apply
+```
+
+`--mode` and `--level` cannot be used together when they specify incompatible
+values. Prefer `--mode` for new installs.
 
 Remove the managed project guidance with:
 

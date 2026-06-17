@@ -25,7 +25,9 @@ def test_help_and_subcommand_help(capsys):
     assert "--json" in capsys.readouterr().out
 
     assert cli.main(["install_delegant", "--help"]) == 0
-    assert "--level" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "--mode" in out
+    assert "--level" in out
 
 
 def test_run_with_inline_prompt(capsys):
@@ -141,7 +143,7 @@ def test_evaluate_output_file_json_serialization(tmp_path, capsys):
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "failed"
-    assert payload["files"] == {"errors.txt": "bad bytes: \ufffd"}
+    assert payload["files"] == {"errors.txt": "bad bytes: �"}
 
 
 def test_target_and_targets_are_mutually_exclusive(capsys):
@@ -204,58 +206,314 @@ def test_execution_failure_writes_stderr_only(capsys):
     assert "target failed" in captured.err
 
 
-def test_install_delegant_creates_project_guidance(tmp_path, capsys):
-    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "1"])
+# ---------------------------------------------------------------------------
+# 1.1 Tests: --mode main, --mode hybrid, --mode delegated-apply
+# ---------------------------------------------------------------------------
+
+
+def test_install_delegant_mode_main_creates_guidance(tmp_path, capsys):
+    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "main"])
 
     assert exit_code == 0
     guidance = tmp_path / "AGENTS.md"
     assert guidance.exists()
     text = guidance.read_text(encoding="utf-8")
     assert "agent-dispatch:openspec-delegation:start" in text
-    assert "Delegation level: 1" in text
-    assert "Codex-routed selective delegation" in text
+    assert "Delegation mode: main" in text
+    assert "no automatic submodel delegation" in text
     captured = capsys.readouterr()
+    assert "Delegation mode: main" in captured.out
     assert "Scope: project-local" in captured.out
 
 
-def test_install_delegant_updates_existing_managed_block(tmp_path):
+def test_install_delegant_mode_hybrid_creates_guidance(tmp_path, capsys):
+    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"])
+
+    assert exit_code == 0
     guidance = tmp_path / "AGENTS.md"
-    guidance.write_text("Existing guidance\n", encoding="utf-8")
-
-    assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "1"]) == 0
-    assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "2"]) == 0
-
+    assert guidance.exists()
     text = guidance.read_text(encoding="utf-8")
-    assert text.count("agent-dispatch:openspec-delegation:start") == 1
-    assert "Existing guidance" in text
-    assert "Delegation level: 2" in text
-    assert "submodel-first implementation" in text
-    assert "Delegation level: 1" not in text
+    assert "agent-dispatch:openspec-delegation:start" in text
+    assert "Delegation mode: hybrid" in text
+    assert "delegation-first apply for tagged work" in text
+    assert "recommended delegation-first cost-control default" in text
+    captured = capsys.readouterr()
+    assert "Delegation mode: hybrid" in captured.out
 
 
-def test_install_delegant_non_interactive_requires_level(tmp_path, capsys):
+def test_install_delegant_mode_delegated_apply_creates_guidance(tmp_path, capsys):
+    exit_code = cli.main(
+        ["install_delegant", "--cwd", str(tmp_path), "--mode", "delegated-apply"]
+    )
+
+    assert exit_code == 0
+    guidance = tmp_path / "AGENTS.md"
+    assert guidance.exists()
+    text = guidance.read_text(encoding="utf-8")
+    assert "agent-dispatch:openspec-delegation:start" in text
+    assert "Delegation mode: delegated-apply" in text
+    assert "full delegated apply with main-model verification" in text
+    captured = capsys.readouterr()
+    assert "Delegation mode: delegated-apply" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# 1.2 Compatibility tests: --level → mode mapping
+# ---------------------------------------------------------------------------
+
+
+def test_install_delegant_level_1_maps_to_hybrid(tmp_path, capsys):
+    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "1"])
+
+    assert exit_code == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: hybrid" in text
+    captured = capsys.readouterr()
+    assert "Delegation mode: hybrid" in captured.out
+
+
+def test_install_delegant_level_2_maps_to_delegated_apply(tmp_path, capsys):
+    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "2"])
+
+    assert exit_code == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: delegated-apply" in text
+    captured = capsys.readouterr()
+    assert "Delegation mode: delegated-apply" in captured.out
+
+
+def test_install_delegant_same_mode_and_level_accepted(tmp_path):
+    """--mode hybrid --level 1 are compatible (same effective mode)."""
+    exit_code = cli.main(
+        ["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid", "--level", "1"]
+    )
+    assert exit_code == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: hybrid" in text
+
+
+# ---------------------------------------------------------------------------
+# 1.3 Conflict and non-interactive tests
+# ---------------------------------------------------------------------------
+
+
+def test_install_delegant_conflicting_mode_and_level_rejected(tmp_path, capsys):
+    """--mode main --level 1 are incompatible (main vs hybrid)."""
+    exit_code = cli.main(
+        ["install_delegant", "--cwd", str(tmp_path), "--mode", "main", "--level", "1"]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "incompatible" in captured.err
+    assert not (tmp_path / "AGENTS.md").exists()
+
+
+def test_install_delegant_conflicting_mode_delegated_and_level_rejected(tmp_path, capsys):
+    """--mode main --level 2 are incompatible (main vs delegated-apply)."""
+    exit_code = cli.main(
+        ["install_delegant", "--cwd", str(tmp_path), "--mode", "main", "--level", "2"]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "incompatible" in captured.err
+    assert not (tmp_path / "AGENTS.md").exists()
+
+
+def test_install_delegant_non_interactive_requires_mode(tmp_path, capsys):
     exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path)])
 
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert "requires --level in non-interactive mode" in captured.err
+    assert "requires --mode in non-interactive mode" in captured.err
     assert not (tmp_path / "AGENTS.md").exists()
 
 
-def test_install_delegant_yes_uses_level_one_default(tmp_path):
+def test_install_delegant_yes_uses_hybrid_default(tmp_path, capsys):
     assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--yes"]) == 0
 
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert "Delegation level: 1" in text
+    assert "Delegation mode: hybrid" in text
+    captured = capsys.readouterr()
+    assert "Delegation mode: hybrid" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Update / uninstall tests (using --mode)
+# ---------------------------------------------------------------------------
+
+
+def test_install_delegant_updates_existing_managed_block_in_place(tmp_path):
+    guidance = tmp_path / "AGENTS.md"
+    guidance.write_text("Existing guidance\n", encoding="utf-8")
+
+    assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"]) == 0
+    assert cli.main(
+        ["install_delegant", "--cwd", str(tmp_path), "--mode", "delegated-apply"]
+    ) == 0
+
+    text = guidance.read_text(encoding="utf-8")
+    assert text.count("agent-dispatch:openspec-delegation:start") == 1
+    assert "Existing guidance" in text
+    assert "Delegation mode: delegated-apply" in text
+    assert "Delegation mode: hybrid" not in text
 
 
 def test_install_delegant_uninstall_removes_managed_block(tmp_path):
     guidance = tmp_path / "AGENTS.md"
     guidance.write_text("Keep me\n", encoding="utf-8")
-    assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--level", "1"]) == 0
+    assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"]) == 0
 
     assert cli.main(["install_delegant", "--cwd", str(tmp_path), "--uninstall"]) == 0
 
     text = guidance.read_text(encoding="utf-8")
     assert "Keep me" in text
     assert "agent-dispatch:openspec-delegation:start" not in text
+
+
+def test_install_delegant_uninstall_when_not_installed(tmp_path, capsys):
+    exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path), "--uninstall"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "not-installed" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# 3.3 Task-packet guidance assertions
+# ---------------------------------------------------------------------------
+
+
+def test_guidance_block_includes_task_packet_instructions(tmp_path):
+    cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"])
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Propose-time task packets" in text
+    assert "context" in text
+    assert "output" in text
+    assert "verify" in text
+    assert "[delegate:test]" in text
+
+
+def test_all_mode_guidance_blocks_include_task_packet_instructions(tmp_path):
+    for mode in ("main", "hybrid", "delegated-apply"):
+        cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", mode])
+
+        text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+        assert "Propose-time task packets" in text, f"missing in mode {mode}"
+        assert "context" in text, f"missing in mode {mode}"
+        assert "output" in text, f"missing in mode {mode}"
+        assert "verify" in text, f"missing in mode {mode}"
+        assert "- [ ]" in text, f"missing checkbox in mode {mode}"
+
+
+# ---------------------------------------------------------------------------
+# Mode-specific guidance content assertions
+# ---------------------------------------------------------------------------
+
+
+def test_main_mode_guidance_disables_automatic_delegation(tmp_path):
+    cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "main"])
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "no automatic submodel delegation" in text
+    assert "Do not delegate any apply tasks" in text
+
+
+def test_hybrid_mode_guidance_lists_main_model_ownership(tmp_path):
+    cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"])
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Main model owns" in text
+    assert "OpenSpec artifact interpretation, scope, and architecture decisions" in text
+    assert "Submodels are assigned" in text
+    assert "Implementation drafts with clear file scope" in text
+    assert "First-pass diff/spec review" in text
+
+
+def test_hybrid_mode_guidance_requires_delegation_first_for_tagged_tasks(tmp_path):
+    cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "hybrid"])
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Hybrid mandatory delegation rules" in text
+    assert "supersedes older guidance" in text
+    assert "mandatory delegation-attempt tags, not" in text
+    assert "During OpenSpec propose, Codex MUST call DeepSeek" in text
+    assert "finalizing `proposal.md`, `design.md`, or `tasks.md`" in text
+    assert "not just ask" in text
+    assert "Codex MUST assign delegate-friendly implementation" in text
+    assert "Codex MUST attempt delegation for every `[delegate:deepseek]`" in text
+    assert "A valid apply-time delegation attempt means Codex actually invokes" in text
+    assert "Do not skip a tagged delegate task merely because it is small" in text
+    assert "Do not reinterpret tagged delegate tasks" in text
+    assert "agent-dispatch run --target deepseek --prompt-file <packet>" in text
+
+
+def test_delegated_apply_mode_guidance_requires_main_model_verification(tmp_path):
+    cli.main(["install_delegant", "--cwd", str(tmp_path), "--mode", "delegated-apply"])
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "full delegated apply" in text
+    assert "main-model verification" in text
+    assert "The main model must" in text
+
+
+# ---------------------------------------------------------------------------
+# Interactive mode selection tests
+# ---------------------------------------------------------------------------
+
+
+def test_interactive_mode_selection_A_main(monkeypatch, tmp_path, capsys):
+    inputs = iter(["A"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(cli.sys.stdin, "isatty", return_value=True, create=True):
+        assert cli.main(["install_delegant", "--cwd", str(tmp_path)]) == 0
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: main" in text
+    captured = capsys.readouterr()
+    assert "A) main" in captured.out
+
+
+def test_interactive_mode_selection_B_hybrid(monkeypatch, tmp_path, capsys):
+    inputs = iter(["B"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(cli.sys.stdin, "isatty", return_value=True, create=True):
+        assert cli.main(["install_delegant", "--cwd", str(tmp_path)]) == 0
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: hybrid" in text
+    captured = capsys.readouterr()
+    assert "B) hybrid" in captured.out
+
+
+def test_interactive_mode_selection_C_delegated_apply(monkeypatch, tmp_path, capsys):
+    inputs = iter(["C"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(cli.sys.stdin, "isatty", return_value=True, create=True):
+        assert cli.main(["install_delegant", "--cwd", str(tmp_path)]) == 0
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: delegated-apply" in text
+    captured = capsys.readouterr()
+    assert "C) delegated-apply" in captured.out
+
+
+def test_interactive_mode_selection_lowercase_accepted(monkeypatch, tmp_path):
+    inputs = iter(["b"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(cli.sys.stdin, "isatty", return_value=True, create=True):
+        assert cli.main(["install_delegant", "--cwd", str(tmp_path)]) == 0
+
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Delegation mode: hybrid" in text
+
+
+def test_interactive_mode_selection_invalid_rejected(monkeypatch, tmp_path, capsys):
+    inputs = iter(["X"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(cli.sys.stdin, "isatty", return_value=True, create=True):
+        exit_code = cli.main(["install_delegant", "--cwd", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "mode must be A, B, or C" in captured.err
